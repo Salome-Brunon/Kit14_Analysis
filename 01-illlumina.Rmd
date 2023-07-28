@@ -8,6 +8,8 @@ library(FactoMineR)
 library(factoextra)
 library(EnhancedVolcano)
 library(readxl)
+library(kableExtra)
+library(dplyr)
 ```
 
 PCA
@@ -63,7 +65,7 @@ volcano_plot
 MA Plots
 
 ```{r, echo=FALSE}
-knitr::include_graphics("~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-diffana_MA_plot_LLO_vs_Neg.png")
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_Illumina.png")
 ```
 
 Table DEA
@@ -91,8 +93,19 @@ colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm
 DEA_complete <- cbind(DEA_complete, raw_rows)
 DEA_complete <- cbind(DEA_complete, norm_rows)
 DEA_complete <- DEA_complete[, c(1:4, 7:12, 14:19)]
-# Print the result
-print(DEA_complete)
 
 write.table(DEA_complete, "~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",")
+
+rownames(DEA_complete) <- DEA_complete$Id
+DEA_complete <- DEA_complete[, c(2:16)]
+colnames(DEA_complete) <- c("baseMean", "logFC", "Adj.pval", 
+                            "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw",
+                            "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+DEA_complete <- DEA_complete %>%                   # Using dplyr functions
+  mutate_if(is.numeric,
+            round,
+            digits = 2)
+# Print the result
+kable(DEA_complete[c(0:100),], "html") %>%
+    kable_paper("hover", full_width = F)
 ```
