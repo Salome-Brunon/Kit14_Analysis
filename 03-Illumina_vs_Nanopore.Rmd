@@ -1,0 +1,221 @@
+# Illumina vs Nanopore
+
+Load Libraries
+
+```{r, message=FALSE, warning=FALSE}
+library(readxl)
+library(ggplot2)
+library(ggpubr)
+library(tidyverse)
+library(hrbrthemes)
+library(tm)
+library(proustr)
+library(VennDiagram)
+library(gespeR)
+library(EnhancedVolcano)
+library(FoldGO)
+library(topGO)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+```
+
+Load Data
+```{r, message=FALSE, warning=FALSE, include=FALSE}
+
+convert_commas_to_periods <- function(df, columns) {
+  for (col in columns) {
+    df[[col]] <- as.numeric(gsub(",", ".", df[[col]]))
+  }
+  return(df)
+}
+
+# Specify the columns to convert commas to periods
+columns_to_convert <- c("log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values")
+
+genes_illumina <- read_csv('~/shares-net/sequencages/analyses/cDNAKit14_A2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.csv')
+genes_illumina <- genes_illumina[,c(1,3,7,10)]
+colnames(genes_illumina) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_illumina <- convert_commas_to_periods(genes_illumina, columns_to_convert)
+genes_illumina <- genes_illumina[!is.na(genes_illumina$log2foldchange.LLO.vs.Neg),]
+genes_illumina <- genes_illumina[!is.na(genes_illumina$BH.adjusted.p.values),]
+
+genes_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_Kit11 <- genes_Kit11[,c(1,3,7,10)]
+colnames(genes_Kit11) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_Kit11$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit11$log2foldchange.LLO.vs.Neg)
+genes_Kit11$BH.adjusted.p.values <- as.numeric(genes_Kit11$BH.adjusted.p.values)
+genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$log2foldchange.LLO.vs.Neg),]
+genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$BH.adjusted.p.values),]
+
+genes_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_Kit9 <- genes_Kit9[,c(1,3,7,10)]
+colnames(genes_Kit9) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_Kit9$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit9$log2foldchange.LLO.vs.Neg)
+genes_Kit9$BH.adjusted.p.values <- as.numeric(genes_Kit9$BH.adjusted.p.values)
+genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$log2foldchange.LLO.vs.Neg),]
+genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$BH.adjusted.p.values),]
+
+genes_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_P2 <- genes_P2[,c(1,3,7,10)]
+colnames(genes_P2) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_P2$log2foldchange.LLO.vs.Neg <- as.numeric(genes_P2$log2foldchange.LLO.vs.Neg)
+genes_P2$BH.adjusted.p.values <- as.numeric(genes_P2$BH.adjusted.p.values)
+genes_P2 <- genes_P2[!is.na(genes_P2$log2foldchange.LLO.vs.Neg),]
+genes_P2 <- genes_P2[!is.na(genes_P2$BH.adjusted.p.values),]
+```
+
+Volcano Plots
+
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+illumina_volcano <- EnhancedVolcano(genes_illumina,
+                lab = genes_illumina$Symbol,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                title = "Illumina",
+                subtitle = NULL,
+                colAlpha = 1,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2)
+
+nano_volcano <- EnhancedVolcano(genes_P2,
+                lab = genes_P2$Symbol,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2)
+ggarrange(illumina_volcano, nano_volcano, ncol = 2, common.legend = TRUE)
+```
+
+Create Differential Genes Lists + Rank
+
+```{r, include=FALSE}
+genes_illumina_DE <- genes_illumina[genes_illumina$log2foldchange.LLO.vs.Neg >=1 | genes_illumina$log2foldchange.LLO.vs.Neg <=(-1),]
+genes_illumina_DE <- genes_illumina_DE[genes_illumina_DE$BH.adjusted.p.values < 0.05,]
+genes_illumina_DE <- genes_illumina_DE[order(genes_illumina_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
+genes_illumina_DE$rank <- seq.int(nrow(genes_illumina_DE))
+
+genes_Kit11_DE <- genes_Kit11[genes_Kit11$log2foldchange.LLO.vs.Neg >=1 | genes_Kit11$log2foldchange.LLO.vs.Neg <=(-1),]
+genes_Kit11_DE <- genes_Kit11_DE[genes_Kit11_DE$BH.adjusted.p.values < 0.05,]
+genes_Kit11_DE <- genes_Kit11_DE[order(genes_Kit11_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
+genes_Kit11_DE$rank <- seq.int(nrow(genes_Kit11_DE))
+
+genes_Kit9_DE <- genes_Kit9[genes_Kit9$log2foldchange.LLO.vs.Neg >=1 | genes_Kit9$log2foldchange.LLO.vs.Neg <=(-1),]
+genes_Kit9_DE <- genes_Kit9_DE[genes_Kit9_DE$BH.adjusted.p.values < 0.05,]
+genes_Kit9_DE <- genes_Kit9_DE[order(genes_Kit9_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
+genes_Kit9_DE$rank <- seq.int(nrow(genes_Kit9_DE))
+
+genes_P2_DE <- genes_P2[genes_P2$log2foldchange.LLO.vs.Neg >=1 | genes_P2$log2foldchange.LLO.vs.Neg <=(-1),]
+genes_P2_DE <- genes_P2_DE[genes_P2_DE$BH.adjusted.p.values < 0.05,]
+genes_P2_DE <- genes_P2_DE[order(genes_P2_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
+genes_P2_DE$rank <- seq.int(nrow(genes_P2_DE))
+
+rank_genes <- merge(genes_illumina_DE, genes_Kit9_DE, by = "Id")
+rank_genes <- rank_genes[,c(1,4,5,9)]
+rank_genes <- merge(rank_genes, genes_Kit11_DE, by = "Id")
+rank_genes <- rank_genes[,c(1:4,8)]
+rank_genes <- merge(rank_genes, genes_P2_DE, by = "Id")
+rank_genes <- rank_genes[,c(1:5,9)]
+colnames(rank_genes) <- c("Id", "Symbol", "Rank_Illumina", "Rank_Kit9", "Rank_Kit11", "Rank_P2")
+rank_genes <- rank_genes[order(rank_genes$Rank_Illumina),]
+
+print(rank_genes)
+
+#library(HKprocess)
+
+#kendall <- MannKendallLTP(genes_Kit9_DE$rank, genes_P2_DE$rank)
+```
+
+Venn Diagram Differentially Expressed Genes Shared Between Protocols
+```{r, echo=FALSE, fig.height=12, fig.width=15,}
+P2_Illumina <- venn.diagram(
+  x = list(genes_illumina_DE$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Illumina (", nrow(genes_illumina_DE), ")"), 
+                     paste0("P2 (", nrow(genes_P2_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff'),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-27, 27),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff'))
+
+Kit9_Kit11_P2 <- venn.diagram(
+  x = list(genes_Kit9_DE$Id, genes_Kit11_DE$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Kit9 (", nrow(genes_Kit9_DE), ")"), 
+                     paste0("Kit11 (", nrow(genes_Kit11_DE), ")") , 
+                     paste0("P2 (", nrow(genes_P2_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff',  "gold"),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3), alpha('gold',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-10, 10, 180),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff', "darkorange"))
+
+Kit9_Kit11_Illumina <- venn.diagram(
+  x = list(genes_Kit9_DE$Id, genes_Kit11_DE$Id, genes_illumina_DE$Id),
+  category.names = c(paste0("Kit9 (", nrow(genes_Kit9_DE), ")"), 
+                     paste0("Kit11 (", nrow(genes_Kit11_DE), ")") , 
+                     paste0("Illumina (", nrow(genes_illumina_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff',  "gold"),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3), alpha('gold',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-10, 10, 180),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff', "darkorange"))
+
+Kit9_Kit11_Illumina_P2 <- venn.diagram(
+  x = list(genes_Kit9_DE$Id, genes_Kit11_DE$Id, genes_illumina_DE$Id, genes_P2_DE$Id ),
+  category.names = c(paste0("Kit9 (", nrow(genes_Kit9_DE), ")"), 
+                     paste0("Kit11 (", nrow(genes_Kit11_DE), ")") , 
+                     paste0("Illumina (", nrow(genes_illumina_DE), ")"),
+                     paste0("P2 (", nrow(genes_P2_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff',  "gold", "red"),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3), alpha('gold',0.3), alpha('red',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-10, 10, 20, 30),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff', "darkorange", "red"))
+
+ggarrange(Kit9_Kit11_P2, Kit9_Kit11_Illumina, P2_Illumina, Kit9_Kit11_Illumina_P2, ncol = 2, nrow=2)
+
+```
+
