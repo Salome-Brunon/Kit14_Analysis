@@ -14,7 +14,7 @@ library(dplyr)
 
 PCA
 
-```{r PCA}
+```{r}
 norm_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
 
 # Create a matrix from our table of counts
@@ -27,14 +27,15 @@ pca_matrix <- norm_expression_data %>%
   t()
 
 pca_result <- PCA(pca_matrix, graph = FALSE)
-colours <- c("gold", "gold", "gold", "blue", "blue", "blue")
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
 
-plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples P2")
+plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples Illumina")
+
 ```
 
 Volcano Plot
 
-```{r Volcano Plot, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
 DEA_data <- read_excel('~/shares-net/sequencages/analyses/cDNAKit14_A2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.xlsx')
 DEA_data <- DEA_data[,c(1,2, 3,7,10)]
 colnames(DEA_data) <- c("Id", "baseMean", "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
@@ -69,7 +70,7 @@ knitr::include_graphics("~/Kit14_Analysis/MA_plot_Illumina.png")
 ```
 
 Table DEA
-```{r DEA}
+```{r}
 DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
 DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
 

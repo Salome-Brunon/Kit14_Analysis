@@ -15,6 +15,13 @@ Reference a figure by its code chunk label with the `fig:` prefix, e.g., see Fig
 
 # Introduction
 
+Les échantillions proviennent tous des mêmes tubes. 
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/read_length_distributions_11and9.png")
+```
+
+
 ```{r include=FALSE}
 # automatically create a bib database for R packages
 knitr::write_bib(c(
