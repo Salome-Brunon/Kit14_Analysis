@@ -95,7 +95,7 @@ DEA_complete <- cbind(DEA_complete, raw_rows)
 DEA_complete <- cbind(DEA_complete, norm_rows)
 DEA_complete <- DEA_complete[, c(1:4, 7:12, 14:19)]
 
-write.table(DEA_complete, "~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",")
+write.table(DEA_complete, "Illumina_DEG.csv", sep = ",")
 
 rownames(DEA_complete) <- DEA_complete$Id
 DEA_complete <- DEA_complete[, c(2:16)]

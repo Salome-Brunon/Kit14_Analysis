@@ -1,3 +1,49 @@
+--- 
+title: "Kit14 Analysis"
+author: "Salomé Brunon"
+date: "`r Sys.Date()`"
+site: bookdown::bookdown_site
+output: bookdown::gitbook
+documentclass: book
+bibliography: [book.bib, packages.bib]
+biblio-style: apalike
+link-citations: yes
+github-repo: rstudio/bookdown-demo
+description: "This is a minimal example of using the bookdown package to write a book. The output format for this example is bookdown::gitbook."
+---
+
+# Introduction
+
+Placeholder
+
+
+
+<!--chapter:end:index.Rmd-->
+
+
+# Illumina Analysis {#illumina}
+
+Placeholder
+
+
+
+<!--chapter:end:01-illlumina.Rmd-->
+
+
+# Nanopore Analyses
+
+Placeholder
+
+
+## Kit9_RAP_NO
+## Kit11_RAP_NO
+## Kit9_RAP_O
+## Kit9_Lig_O
+## Kit9_Lig_NO
+## P2-Solo
+
+<!--chapter:end:02-Nanopore-Analyses.Rmd-->
+
 # Illumina vs Nanopore
 **Load Libraries**
 
@@ -44,26 +90,32 @@ genes_illumina <- read_csv('~/shares-net/sequencages/analyses/cDNAKit14_A2022/di
 genes_illumina <- genes_illumina[,c(1,3,7,10)]
 colnames(genes_illumina) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
 genes_illumina <- convert_commas_to_periods(genes_illumina, columns_to_convert)
+genes_illumina <- genes_illumina[!is.na(genes_illumina$log2foldchange.LLO.vs.Neg),]
+genes_illumina <- genes_illumina[!is.na(genes_illumina$BH.adjusted.p.values),]
 
 genes_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
 genes_Kit11 <- genes_Kit11[,c(1,3,7,10)]
 colnames(genes_Kit11) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
 genes_Kit11$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit11$log2foldchange.LLO.vs.Neg)
 genes_Kit11$BH.adjusted.p.values <- as.numeric(genes_Kit11$BH.adjusted.p.values)
+genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$log2foldchange.LLO.vs.Neg),]
+genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$BH.adjusted.p.values),]
 
 genes_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
 genes_Kit9 <- genes_Kit9[,c(1,3,7,10)]
 colnames(genes_Kit9) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
 genes_Kit9$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit9$log2foldchange.LLO.vs.Neg)
 genes_Kit9$BH.adjusted.p.values <- as.numeric(genes_Kit9$BH.adjusted.p.values)
-
+genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$log2foldchange.LLO.vs.Neg),]
+genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$BH.adjusted.p.values),]
 
 genes_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
 genes_P2 <- genes_P2[,c(1,3,7,10)]
 colnames(genes_P2) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
 genes_P2$log2foldchange.LLO.vs.Neg <- as.numeric(genes_P2$log2foldchange.LLO.vs.Neg)
 genes_P2$BH.adjusted.p.values <- as.numeric(genes_P2$BH.adjusted.p.values)
-
+genes_P2 <- genes_P2[!is.na(genes_P2$log2foldchange.LLO.vs.Neg),]
+genes_P2 <- genes_P2[!is.na(genes_P2$BH.adjusted.p.values),]
 ```
 
 **PCA**
@@ -963,7 +1015,7 @@ ggarrange(illumina_volcano, P2_volcano, Kit9_volcano, Kit11_volcano, ncol =2, nr
 ```
 
 **Rank Comparison for Illumina DEGs against Nanopore protocols**
-```{r echo=TRUE, message=FALSE, warning=FALSE}
+```{r echo=TRUE}
 genes_illumina_rank <- genes_illumina %>%
   filter(Id %in% illumina_genes_list)
 genes_illumina_rank$rank <- seq.int(nrow(genes_illumina_rank))
@@ -980,17 +1032,18 @@ genes_P2_rank <- genes_P2 %>%
   filter(Id %in% illumina_genes_list)
 genes_P2_rank$rank <- seq.int(nrow(genes_P2_rank))
 
-rank_genes_illumina <- merge(genes_illumina_rank, genes_Kit9_rank, by = "Id", all=TRUE)
-rank_genes_illumina <- rank_genes_illumina[,c(1,5,9,2,6,3,7)]
-rank_genes_illumina <- merge(rank_genes_illumina, genes_Kit11_rank, by = "Id",  all=TRUE)
-rank_genes_illumina <- rank_genes_illumina[,c(1,2,3,11,4,5,8,6,7,9)]
-rank_genes_illumina <- merge(rank_genes_illumina, genes_P2_rank, by = "Id",  all=TRUE)
-rank_genes_illumina <- rank_genes_illumina[,c(1,2,3,4,14,5,6,7,11,8,9,10,12)]
-rank_genes_illumina <- rank_genes_illumina[order(rank_genes_illumina$rank.x),]
-colnames(rank_genes_illumina) <- c("Id", "Rank_Illumina", "Rank_Kit9", "Rank_Kit11", "Rank_P2",
-                                    "logFC_Illumina", "logFC_Kit9", "logFC_Kit11", "logFC_P2",
-                                    "adj.pval_Illumina", "adj.pval_Kit9", "adj.pval_Kit11", "adj.pval_P2")
+```
 
+Ranking of Illumina DEGs Table
+```{r}
+rank_genes_illumina <- merge(genes_Kit11_rank, genes_P2_rank, by = "Id")
+rank_genes_illumina <- rank_genes_illumina[,c(1,4,5,9)]
+rank_genes_illumina <- merge(rank_genes_illumina, genes_Kit11_DE, by = "Id")
+rank_genes_illumina <- rank_genes_illumina[,c(1:4,8)]
+rank_genes_illumina <- merge(rank_genes_illumina, genes_P2_DE, by = "Id")
+rank_genes_illumina <- rank_genes_illumina[,c(1:5,9)]
+colnames(rank_genes_illumina) <- c("Id", "Symbol", "Rank_Illumina", "Rank_Kit9", "Rank_Kit11", "Rank_P2")
+rank_genes_illumina <- rank_genes_illumina[order(rank_genes_illumina$Rank_Illumina),]
 
 kable(rank_genes_illumina, "html") %>%
   kable_styling(full_width = F)
@@ -999,29 +1052,21 @@ kable(rank_genes_illumina, "html") %>%
 **Differential Genes Lists + Rank**
 
 ```{r echo=TRUE}
-genes_illumina <- genes_illumina[!is.na(genes_illumina$log2foldchange.LLO.vs.Neg),]
-genes_illumina <- genes_illumina[!is.na(genes_illumina$BH.adjusted.p.values),]
 genes_illumina_DE <- genes_illumina[genes_illumina$log2foldchange.LLO.vs.Neg >=1 | genes_illumina$log2foldchange.LLO.vs.Neg <=(-1),]
 genes_illumina_DE <- genes_illumina_DE[genes_illumina_DE$BH.adjusted.p.values < 0.05,]
 genes_illumina_DE <- genes_illumina_DE[order(genes_illumina_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
 genes_illumina_DE$rank <- seq.int(nrow(genes_illumina_DE))
 
-genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$log2foldchange.LLO.vs.Neg),]
-genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$BH.adjusted.p.values),]
 genes_Kit11_DE <- genes_Kit11[genes_Kit11$log2foldchange.LLO.vs.Neg >=1 | genes_Kit11$log2foldchange.LLO.vs.Neg <=(-1),]
 genes_Kit11_DE <- genes_Kit11_DE[genes_Kit11_DE$BH.adjusted.p.values < 0.05,]
 genes_Kit11_DE <- genes_Kit11_DE[order(genes_Kit11_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
 genes_Kit11_DE$rank <- seq.int(nrow(genes_Kit11_DE))
 
-genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$log2foldchange.LLO.vs.Neg),]
-genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$BH.adjusted.p.values),]
 genes_Kit9_DE <- genes_Kit9[genes_Kit9$log2foldchange.LLO.vs.Neg >=1 | genes_Kit9$log2foldchange.LLO.vs.Neg <=(-1),]
 genes_Kit9_DE <- genes_Kit9_DE[genes_Kit9_DE$BH.adjusted.p.values < 0.05,]
 genes_Kit9_DE <- genes_Kit9_DE[order(genes_Kit9_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
 genes_Kit9_DE$rank <- seq.int(nrow(genes_Kit9_DE))
 
-genes_P2 <- genes_P2[!is.na(genes_P2$log2foldchange.LLO.vs.Neg),]
-genes_P2 <- genes_P2[!is.na(genes_P2$BH.adjusted.p.values),]
 genes_P2_DE <- genes_P2[genes_P2$log2foldchange.LLO.vs.Neg >=1 | genes_P2$log2foldchange.LLO.vs.Neg <=(-1),]
 genes_P2_DE <- genes_P2_DE[genes_P2_DE$BH.adjusted.p.values < 0.05,]
 genes_P2_DE <- genes_P2_DE[order(genes_P2_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
@@ -1122,4 +1167,7 @@ ggarrange(Kit9_Kit11_P2, Kit9_Kit11_Illumina, P2_Illumina, Kit9_Kit11_Illumina_P
 ```
 
 
+
+
+<!--chapter:end:03-Illumina_vs_Nanopore.Rmd-->
 
