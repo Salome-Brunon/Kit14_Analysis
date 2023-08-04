@@ -1,0 +1,178 @@
+# Mitochondrial Genes
+```{r, message=FALSE, warning=FALSE}
+library(FactoMineR)
+library(readxl)
+library(ggrepel)
+library(ggplot2)
+library(ggpubr)
+library(kableExtra)
+library(tidyverse)
+library(hrbrthemes)
+library(tm)
+library(proustr)
+library(VennDiagram)
+library(gespeR)
+library(EnhancedVolcano)
+library(FoldGO)
+library(topGO)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+```
+
+**Load Normalised Expression and DESeq2 Data**
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Normalised Count Data
+count_illumina <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+count_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+
+#DESeq2
+convert_commas_to_periods <- function(df, columns) {
+  for (col in columns) {
+    df[[col]] <- as.numeric(gsub(",", ".", df[[col]]))
+  }
+  return(df)
+}
+
+# Specify the columns to convert commas to periods
+columns_to_convert <- c("log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values")
+
+genes_illumina <- read_csv('~/shares-net/sequencages/analyses/cDNAKit14_A2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.csv')
+genes_illumina <- genes_illumina[,c(1,3,7,10)]
+colnames(genes_illumina) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_illumina <- convert_commas_to_periods(genes_illumina, columns_to_convert)
+genes_illumina <- genes_illumina[!is.na(genes_illumina$log2foldchange.LLO.vs.Neg),]
+genes_illumina <- genes_illumina[!is.na(genes_illumina$BH.adjusted.p.values),]
+
+genes_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_Kit11 <- genes_Kit11[,c(1,3,7,10)]
+colnames(genes_Kit11) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_Kit11$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit11$log2foldchange.LLO.vs.Neg)
+genes_Kit11$BH.adjusted.p.values <- as.numeric(genes_Kit11$BH.adjusted.p.values)
+
+
+genes_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_Kit9 <- genes_Kit9[,c(1,3,7,10)]
+colnames(genes_Kit9) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_Kit9$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit9$log2foldchange.LLO.vs.Neg)
+genes_Kit9$BH.adjusted.p.values <- as.numeric(genes_Kit9$BH.adjusted.p.values)
+
+
+genes_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_P2 <- genes_P2[,c(1,3,7,10)]
+colnames(genes_P2) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_P2$log2foldchange.LLO.vs.Neg <- as.numeric(genes_P2$log2foldchange.LLO.vs.Neg)
+genes_P2$BH.adjusted.p.values <- as.numeric(genes_P2$BH.adjusted.p.values)
+
+```
+
+**Remove Mitochondrial Genes**
+
+
+```{r}
+mito_genes <- read.table("~/Documents/Kit14_Analysis/mito_genes_filt.txt", header=TRUE)
+print(mito_genes)
+
+count_illumina_filt <- count_illumina[!(count_illumina$Id %in% mito_genes$EnsemblGeneID), ]  
+count_Kit9_filt <- count_Kit9[!(count_Kit9$Id %in% mito_genes$EnsemblGeneID), ]  
+count_Kit11_filt <- count_Kit11[!(count_Kit11$Id %in% mito_genes$EnsemblGeneID), ]  
+count_P2_filt <- count_P2[!(count_P2$Id %in% mito_genes$EnsemblGeneID), ]  
+
+```
+
+
+**PCA**
+
+```{r}
+LLO1_filt_pca_matrix <- count_illumina_filt[,c(1,2)]
+LLO1_filt_pca_matrix <- cbind(LLO1_filt_pca_matrix, count_Kit9_filt$LLO1, count_Kit11_filt$LLO1, count_P2_filt$LLO1)
+colnames(LLO1_filt_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+rownames(LLO1_filt_pca_matrix) <- NULL
+
+LLO1_filt_pca_matrix <- LLO1_filt_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO1_filt_pca_result <- PCA(LLO1_filt_pca_matrix, graph = FALSE)
+LLO1_filt_plot <- plot.PCA(LLO1_filt_pca_result, title = "PCA - Sample LLO1")
+
+LLO1_filt_plot
+
+# Create a matrix from our table of counts
+Illumina_filt_pca_matrix <- count_illumina_filt %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+Kit9_filt_pca_matrix <- count_Kit9_filt %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+
+Kit11_filt_pca_matrix <- count_Kit11_filt %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+
+P2_filt_pca_matrix <- count_P2_filt %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+
+Illumina_pca_result <- PCA(Illumina_pca_matrix, graph = FALSE)
+Kit11_pca_result <- PCA(Kit11_pca_matrix, graph = FALSE) 
+P2_pca_result <- PCA(P2_pca_matrix, graph = FALSE)
+
+combined_pca_matrix <- cbind(Illumina_pca_matrix, Kit11_pca_matrix)
+combined_pca_matrix <- cbind(combined_pca_matrix, P2_pca_matrix)
+combined_pca_result <- PCA(combined_pca_matrix, graph = FALSE)
+variance_dim1 <- round(combined_pca_result$eig[1, "percentage of variance"], 2)
+variance_dim2 <- round(combined_pca_result$eig[2, "percentage of variance"], 2)
+
+# Create a dataframe for PCA results
+Illumina_pca_df <- as.data.frame(Illumina_pca_result$ind$coord)
+
+# Map the colours to appropriate labels
+Illumina_pca_df$condition <- c(rep("LLO", 3),
+                          rep("Neg", 3))
+Illumina_pca_df$protocol  <- c(rep("Illumina", 6))
+Illumina_pca_df$samples <- rownames(Illumina_pca_df)
+
+
+P2_pca_df <- as.data.frame(P2_pca_result$ind$coord)
+P2_pca_df$condition  <- c(rep("LLO", 3),
+                          rep("Neg", 3))
+P2_pca_df$protocol  <- c(rep("P2_Kit11", 6))
+P2_pca_df$samples <- rownames(P2_pca_df)
+
+
+Kit11_pca_df <- as.data.frame(Kit11_pca_result$ind$coord)
+
+Kit11_pca_df$condition  <- c(rep("LLO", 3),
+                          rep("Neg", 3))
+Kit11_pca_df$protocol  <- c(rep("Kit11", 6))
+Kit11_pca_df$samples <- rownames(Kit11_pca_df)
+
+
+# Combine the dataframes
+combined_pca_df <- rbind(Illumina_pca_df, P2_pca_df, Kit11_pca_df)
+
+# Create a custom PCA plot using ggplot2
+pca_plot <- ggplot(combined_pca_df, aes(x = Dim.1, y = Dim.2, color = condition, shape = protocol, label = samples)) +
+  geom_point(size = 3) +
+  geom_text_repel(size = 3)  +  # Add text labels with a slight offset
+  scale_color_manual(values = c(Neg = "#B276B2", LLO = "#FAA43A")) +
+  scale_shape_manual(values = c(Illumina = "circle", P2_Kit11 = "square", Kit11 = "triangle")) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey75") +  # Add horizontal line at y = 0
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey75") +  # Add vertical line at x = 0
+  labs(title = "PCA - All Samples",
+       x = paste0("Dim.1 (", variance_dim1, "%)"),
+       y = paste0("Dim.2 (", variance_dim2, "%)"))
+
+print(pca_plot)
+
+```

@@ -11,36 +11,818 @@ link-citations: yes
 github-repo: rstudio/bookdown-demo
 description: "This is a minimal example of using the bookdown package to write a book. The output format for this example is bookdown::gitbook."
 ---
+Reference a figure by its code chunk label with the `fig:` prefix, e.g., see Figure \@ref(fig:nice-fig). Similarly, you can reference tables generated from `knitr::kable()`, e.g., see Table \@ref(tab:nice-tab).
 
 # Introduction
 
-Placeholder
+Les échantillions proviennent tous des mêmes tubes. 
 
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/read_length_distributions_11and9.png")
+```
 
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/Methods_DEA.png")
+```
+
+```{r include=FALSE}
+# automatically create a bib database for R packages
+knitr::write_bib(c(
+  .packages(), 'bookdown', 'knitr', 'rmarkdown'
+), 'packages.bib')
+```
 
 <!--chapter:end:index.Rmd-->
 
-
 # Illumina Analysis {#illumina}
 
-Placeholder
+Load Libraries
 
+```{r Load_library, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(FactoMineR)
+library(factoextra)
+library(EnhancedVolcano)
+library(readxl)
+library(kableExtra)
+library(dplyr)
+```
 
+PCA
+
+```{r}
+norm_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+
+# Create a matrix from our table of counts
+pca_matrix <- norm_expression_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
+
+plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples Illumina")
+
+```
+
+Volcano Plot
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+DEA_data <- read_excel('~/shares-net/sequencages/analyses/cDNAKit14_A2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.xlsx')
+DEA_data <- DEA_data[,c(1,2, 3,7,10)]
+colnames(DEA_data) <- c("Id", "baseMean", "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+DEA_data$log2foldchange.LLO.vs.Neg <- as.numeric(DEA_data$log2foldchange.LLO.vs.Neg)    
+DEA_data$BH.adjusted.p.values <- as.numeric(DEA_data$BH.adjusted.p.values)
+
+volcano_plot <- EnhancedVolcano(DEA_data,
+                lab = DEA_data$Symbol,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                xlim = c(-5,10))
+volcano_plot
+```
+
+MA Plots
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_Illumina.png")
+```
+
+Table DEA
+```{r}
+DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
+DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
+
+DEA_data_sig <- DEA_data[DEA_data$log2foldchange.LLO.vs.Neg >=1 | DEA_data$log2foldchange.LLO.vs.Neg <=(-1),]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$BH.adjusted.p.values < 0.05,]
+DEA_data_sig <- DEA_data_sig[order(DEA_data_sig$baseMean,decreasing=TRUE),]
+
+raw_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_rawPooledCountMatrix.tsv', header = TRUE, sep = '\t')
+DEA_complete <- DEA_data_sig
+
+###Add raw expression counts
+DEG_list <- DEA_data_sig$Id
+
+# Step 1: Extract rows from df1 based on the list of IDs
+raw_rows <- raw_expression_data[raw_expression_data$Id %in% DEG_list, ]
+colnames(raw_rows) <- c("Id", "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw")
+norm_rows <- norm_expression_data[norm_expression_data$Id %in% DEG_list, ]
+colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+
+# Step 2: Add the extracted rows to df2
+DEA_complete <- cbind(DEA_complete, raw_rows)
+DEA_complete <- cbind(DEA_complete, norm_rows)
+DEA_complete <- DEA_complete[, c(1:4, 7:12, 14:19)]
+
+write.table(DEA_complete, "Illumina_DEG.csv", sep = ",")
+
+rownames(DEA_complete) <- DEA_complete$Id
+DEA_complete <- DEA_complete[, c(2:16)]
+colnames(DEA_complete) <- c("baseMean", "logFC", "Adj.pval", 
+                            "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw",
+                            "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+DEA_complete <- DEA_complete %>%                   # Using dplyr functions
+  mutate_if(is.numeric,
+            round,
+            digits = 2)
+# Print the result
+kable(DEA_complete[c(0:100),], "html") %>%
+    kable_paper("hover", full_width = F)
+```
 
 <!--chapter:end:01-illlumina.Rmd-->
 
-
 # Nanopore Analyses
 
-Placeholder
+Analyses of the Nanopore protocols and comparisons of their DEA against Illumina results.
 
+Load Libraries
+
+```{r Load_Libraries, message=FALSE, warning=FALSE}
+library(tidyverse)
+library(FactoMineR)
+library(factoextra)
+library(EnhancedVolcano)
+library(kableExtra)
+library(bookdown)
+```
 
 ## Kit9_RAP_NO
+
+PCA
+
+```{r}
+norm_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+
+# Create a matrix from our table of counts
+pca_matrix <- norm_expression_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
+
+plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples Kit9")
+```
+
+Volcano Plot
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+DEA_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header = TRUE, sep = '\t')
+nano_volcano <- EnhancedVolcano(DEA_data,
+                lab = DEA_data$Gene.name,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                xlim = c(-5,10))
+nano_volcano
+```
+
+MA Plots
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_Kit9.png")
+```
+
+ Table DEA
+```{r}
+DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
+DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
+
+DEA_data_sig <- DEA_data[, c(1,2,3,7)]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$log2foldchange.LLO.vs.Neg >=1 | DEA_data_sig$log2foldchange.LLO.vs.Neg <=(-1),]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$BH.adjusted.p.values < 0.05,]
+DEA_data_sig <- DEA_data_sig[order(DEA_data_sig$baseMean,decreasing=TRUE),]
+
+raw_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/deseq2_output/deseq2_Experiment1-normalisation_rawPooledCountMatrix.tsv', header = TRUE, sep = '\t')
+DEA_complete <- DEA_data_sig
+
+###Add raw expression counts
+DEG_list <- DEA_data_sig$Id
+
+# Step 1: Extract rows from df1 based on the list of IDs
+raw_rows <- raw_expression_data[raw_expression_data$Id %in% DEG_list, ]
+colnames(raw_rows) <- c("Id", "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw")
+norm_rows <- norm_expression_data[norm_expression_data$Id %in% DEG_list, ]
+colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+
+# Step 2: Add the extracted rows to df2
+DEA_complete <- cbind(DEA_complete, raw_rows)
+DEA_complete <- cbind(DEA_complete, norm_rows)
+DEA_complete <- DEA_complete[, c(1:4, 6:11, 13:18)]
+
+
+kable(DEA_complete[c(0:100),], "html") %>%
+  kable_styling(full_width = F)
+```
+ 
+DEA Comparison with Illumina Top 100 Genes 
+
+```{r}
+illumina_genes <- read.table("~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",", header = TRUE)
+illumina_genes <- illumina_genes[order(illumina_genes$BH.adjusted.p.values, decreasing=FALSE),]
+illumina_genes <- illumina_genes[c(1:100), c(1,3,4)]
+illumina_genes$rank <- seq.int(nrow(illumina_genes))
+colnames(illumina_genes) <- c("Id", "FC_Illumina", "Adj_pval_Illumina", "Rank_Illumina")
+
+DEA_data <- DEA_data[order(DEA_data$BH.adjusted.p.values, decreasing=FALSE),]
+DEA_data$rank <- seq.int(nrow(DEA_data))
+
+Kit9_rows <- DEA_data[DEA_data$Id %in% illumina_genes$Id, ]
+Kit9_rows <- Kit9_rows[, c(1,3,7,23)]
+colnames(Kit9_rows) <- c("Id", "FC_Kit9", "Adj_pval_Kit9", "Rank_Kit9" )
+
+illumina_vs_Kit9_DEA <- merge(illumina_genes, Kit9_rows, by = "Id")
+illumina_vs_Kit9_DEA <- illumina_vs_Kit9_DEA[order(illumina_vs_Kit9_DEA$Rank_Illumina, decreasing=FALSE),]
+
+
+
+kable(illumina_vs_Kit9_DEA, "html") %>%
+  kable_styling(full_width = F)
+```
+
 ## Kit11_RAP_NO
+
+PCA
+
+```{r}
+norm_expression_data_kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+
+# Create a matrix from our table of counts
+pca_matrix_kit11 <- norm_expression_data_kit11 %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+pca_result_Kit11 <- PCA(pca_matrix_kit11, graph = FALSE)
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
+
+plot.PCA(pca_result_Kit11, habillage = "ind", col.hab = colours, title = "PCA - Samples Kit11")
+```
+
+Volcano Plot
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+DEA_data <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header = TRUE, sep = '\t')
+nano_volcano <- EnhancedVolcano(DEA_data,
+                lab = DEA_data$Gene.name,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                xlim = c(-5,10))
+nano_volcano
+```
+
+MA Plots
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_Kit11.png")
+```
+
+ Table DEA
+```{r}
+DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
+DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
+
+DEA_data_sig <- DEA_data[, c(1,2,3,7)]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$log2foldchange.LLO.vs.Neg >=1 | DEA_data_sig$log2foldchange.LLO.vs.Neg <=(-1),]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$BH.adjusted.p.values < 0.05,]
+DEA_data_sig <- DEA_data_sig[order(DEA_data_sig$baseMean,decreasing=TRUE),]
+
+raw_expression_data <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/deseq2_output/deseq2_Experiment1-normalisation_rawPooledCountMatrix.tsv', header = TRUE, sep = '\t')
+DEA_complete <- DEA_data_sig
+
+###Add raw expression counts
+DEG_list <- DEA_data_sig$Id
+
+# Step 1: Extract rows from df1 based on the list of IDs
+raw_rows <- raw_expression_data[raw_expression_data$Id %in% DEG_list, ]
+colnames(raw_rows) <- c("Id", "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw")
+norm_rows <- norm_expression_data[norm_expression_data$Id %in% DEG_list, ]
+colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+
+# Step 2: Add the extracted rows to df2
+DEA_complete <- cbind(DEA_complete, raw_rows)
+DEA_complete <- cbind(DEA_complete, norm_rows)
+DEA_complete <- DEA_complete[, c(1:4, 6:11, 13:18)]
+
+
+kable(DEA_complete[c(0:100),], "html") %>%
+  kable_styling(full_width = F)
+```
+ 
+DEA Comparison with Illumina Top 100 Genes 
+
+```{r}
+illumina_genes <- read.table("~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",", header = TRUE)
+illumina_genes <- illumina_genes[order(illumina_genes$BH.adjusted.p.values, decreasing=FALSE),]
+illumina_genes <- illumina_genes[c(1:100), c(1,3,4)]
+illumina_genes$rank <- seq.int(nrow(illumina_genes))
+colnames(illumina_genes) <- c("Id", "FC_Illumina", "Adj_pval_Illumina", "Rank_Illumina")
+
+DEA_data <- DEA_data[order(DEA_data$BH.adjusted.p.values, decreasing=FALSE),]
+DEA_data$rank <- seq.int(nrow(DEA_data))
+
+Kit11_rows <- DEA_data[DEA_data$Id %in% illumina_genes$Id, ]
+Kit11_rows <- Kit11_rows[, c(1,3,7,23)]
+colnames(Kit11_rows) <- c("Id", "FC_Kit11", "Adj_pval_Kit11", "Rank_Kit11" )
+
+illumina_vs_Kit11_DEA <- merge(illumina_genes, Kit11_rows, by = "Id")
+illumina_vs_Kit11_DEA <- illumina_vs_Kit11_DEA[order(illumina_vs_Kit11_DEA$Rank_Illumina, decreasing=FALSE),]
+
+
+
+kable(illumina_vs_Kit11_DEA, "html") %>%
+  kable_styling(full_width = F)
+```
 ## Kit9_RAP_O
+
+PCA
+
+```{r}
+norm_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_C2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+
+# Create a matrix from our table of counts
+pca_matrix <- norm_expression_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
+
+plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples Kit9_RAP_O")
+```
+
+Volcano Plot
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+DEA_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_C2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header = TRUE, sep = '\t')
+nano_volcano <- EnhancedVolcano(DEA_data,
+                lab = DEA_data$Gene.name,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                xlim = c(-5,10))
+nano_volcano
+```
+
+MA Plots
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_Kit9_RAP_O.png")
+```
+
+ Table DEA
+```{r}
+DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
+DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
+
+DEA_data_sig <- DEA_data[, c(1,2,3,7)]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$log2foldchange.LLO.vs.Neg >=1 | DEA_data_sig$log2foldchange.LLO.vs.Neg <=(-1),]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$BH.adjusted.p.values < 0.05,]
+DEA_data_sig <- DEA_data_sig[order(DEA_data_sig$baseMean,decreasing=TRUE),]
+
+raw_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_C2022/deseq2_output/deseq2_Experiment1-normalisation_rawPooledCountMatrix.tsv', header = TRUE, sep = '\t')
+DEA_complete <- DEA_data_sig
+
+###Add raw expression counts
+DEG_list <- DEA_data_sig$Id
+
+# Step 1: Extract rows from df1 based on the list of IDs
+raw_rows <- raw_expression_data[raw_expression_data$Id %in% DEG_list, ]
+colnames(raw_rows) <- c("Id", "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw")
+norm_rows <- norm_expression_data[norm_expression_data$Id %in% DEG_list, ]
+colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+
+# Step 2: Add the extracted rows to df2
+DEA_complete <- cbind(DEA_complete, raw_rows)
+DEA_complete <- cbind(DEA_complete, norm_rows)
+DEA_complete <- DEA_complete[, c(1:4, 6:11, 13:18)]
+
+
+kable(DEA_complete[c(0:100),], "html") %>%
+  kable_styling(full_width = F)
+```
+ 
+DEA Comparison with Illumina Top 100 Genes 
+
+```{r}
+illumina_genes <- read.table("~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",", header = TRUE)
+illumina_genes <- illumina_genes[order(illumina_genes$BH.adjusted.p.values, decreasing=FALSE),]
+illumina_genes <- illumina_genes[c(1:100), c(1,3,4)]
+illumina_genes$rank <- seq.int(nrow(illumina_genes))
+colnames(illumina_genes) <- c("Id", "FC_Illumina", "Adj_pval_Illumina", "Rank_Illumina")
+
+DEA_data <- DEA_data[order(DEA_data$BH.adjusted.p.values, decreasing=FALSE),]
+DEA_data$rank <- seq.int(nrow(DEA_data))
+
+Kit9_RAP_O_rows <- DEA_data[DEA_data$Id %in% illumina_genes$Id, ]
+Kit9_RAP_O_rows <- Kit9_RAP_O_rows[, c(1,3,7,23)]
+colnames(Kit9_RAP_O_rows) <- c("Id", "FC_Kit9_RAP_O", "Adj_pval_Kit9_RAP_O", "Rank_Kit9_RAP_O" )
+
+illumina_vs_Kit9_RAP_O_DEA <- merge(illumina_genes, Kit9_RAP_O_rows, by = "Id")
+illumina_vs_Kit9_RAP_O_DEA <- illumina_vs_Kit9_RAP_O_DEA[order(illumina_vs_Kit9_RAP_O_DEA$Rank_Illumina, decreasing=FALSE),]
+
+
+
+kable(illumina_vs_Kit9_RAP_O_DEA, "html") %>%
+  kable_styling(full_width = F)
+```
+
 ## Kit9_Lig_O
+
+PCA
+
+```{r}
+norm_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_D2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+
+# Create a matrix from our table of counts
+pca_matrix <- norm_expression_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
+
+plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples Kit9_Lig_O")
+```
+
+Volcano Plot
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+DEA_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_D2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header = TRUE, sep = '\t')
+nano_volcano <- EnhancedVolcano(DEA_data,
+                lab = DEA_data$Gene.name,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                xlim = c(-5,10))
+nano_volcano
+```
+
+MA Plots
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_Kit9_Lig_O.png")
+```
+
+ Table DEA
+```{r}
+DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
+DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
+
+DEA_data_sig <- DEA_data[, c(1,2,3,7)]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$log2foldchange.LLO.vs.Neg >=1 | DEA_data_sig$log2foldchange.LLO.vs.Neg <=(-1),]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$BH.adjusted.p.values < 0.05,]
+DEA_data_sig <- DEA_data_sig[order(DEA_data_sig$baseMean,decreasing=TRUE),]
+
+raw_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_D2022/deseq2_output/deseq2_Experiment1-normalisation_rawPooledCountMatrix.tsv', header = TRUE, sep = '\t')
+DEA_complete <- DEA_data_sig
+
+###Add raw expression counts
+DEG_list <- DEA_data_sig$Id
+
+# Step 1: Extract rows from df1 based on the list of IDs
+raw_rows <- raw_expression_data[raw_expression_data$Id %in% DEG_list, ]
+colnames(raw_rows) <- c("Id", "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw")
+norm_rows <- norm_expression_data[norm_expression_data$Id %in% DEG_list, ]
+colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+
+# Step 2: Add the extracted rows to df2
+DEA_complete <- cbind(DEA_complete, raw_rows)
+DEA_complete <- cbind(DEA_complete, norm_rows)
+DEA_complete <- DEA_complete[, c(1:4, 6:11, 13:18)]
+
+
+kable(DEA_complete[c(0:100),], "html") %>%
+  kable_styling(full_width = F)
+```
+ 
+DEA Comparison with Illumina Top 100 Genes 
+
+```{r}
+illumina_genes <- read.table("~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",", header = TRUE)
+illumina_genes <- illumina_genes[order(illumina_genes$BH.adjusted.p.values, decreasing=FALSE),]
+illumina_genes <- illumina_genes[c(1:100), c(1,3,4)]
+illumina_genes$rank <- seq.int(nrow(illumina_genes))
+colnames(illumina_genes) <- c("Id", "FC_Illumina", "Adj_pval_Illumina", "Rank_Illumina")
+
+DEA_data <- DEA_data[order(DEA_data$BH.adjusted.p.values, decreasing=FALSE),]
+DEA_data$rank <- seq.int(nrow(DEA_data))
+
+Kit9_Lig_O_rows <- DEA_data[DEA_data$Id %in% illumina_genes$Id, ]
+Kit9_Lig_O_rows <- Kit9_Lig_O_rows[, c(1,3,7,23)]
+colnames(Kit9_Lig_O_rows) <- c("Id", "FC_Kit9_Lig_O", "Adj_pval_Kit9_Lig_O", "Rank_Kit9_Lig_O" )
+
+illumina_vs_Kit9_Lig_O_DEA <- merge(illumina_genes, Kit9_Lig_O_rows, by = "Id")
+illumina_vs_Kit9_Lig_O_DEA <- illumina_vs_Kit9_Lig_O_DEA[order(illumina_vs_Kit9_Lig_O_DEA$Rank_Illumina, decreasing=FALSE),]
+
+
+
+kable(illumina_vs_Kit9_Lig_O_DEA, "html") %>%
+  kable_styling(full_width = F)
+```
+
 ## Kit9_Lig_NO
+
+PCA
+
+```{r}
+norm_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_E2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+
+# Create a matrix from our table of counts
+pca_matrix <- norm_expression_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
+
+plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples Kit9_Lig_NO")
+```
+
+Volcano Plot
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+DEA_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_E2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header = TRUE, sep = '\t')
+nano_volcano <- EnhancedVolcano(DEA_data,
+                lab = DEA_data$Gene.name,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                xlim = c(-5,10))
+nano_volcano
+```
+
+MA Plots
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_Kit9_Lig_NO.png")
+```
+
+ Table DEA
+```{r}
+DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
+DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
+
+DEA_data_sig <- DEA_data[, c(1,2,3,7)]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$log2foldchange.LLO.vs.Neg >=1 | DEA_data_sig$log2foldchange.LLO.vs.Neg <=(-1),]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$BH.adjusted.p.values < 0.05,]
+DEA_data_sig <- DEA_data_sig[order(DEA_data_sig$baseMean,decreasing=TRUE),]
+
+raw_expression_data <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_E2022/deseq2_output/deseq2_Experiment1-normalisation_rawPooledCountMatrix.tsv', header = TRUE, sep = '\t')
+DEA_complete <- DEA_data_sig
+
+###Add raw expression counts
+DEG_list <- DEA_data_sig$Id
+
+# Step 1: Extract rows from df1 based on the list of IDs
+raw_rows <- raw_expression_data[raw_expression_data$Id %in% DEG_list, ]
+colnames(raw_rows) <- c("Id", "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw")
+norm_rows <- norm_expression_data[norm_expression_data$Id %in% DEG_list, ]
+colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+
+# Step 2: Add the extracted rows to df2
+DEA_complete <- cbind(DEA_complete, raw_rows)
+DEA_complete <- cbind(DEA_complete, norm_rows)
+DEA_complete <- DEA_complete[, c(1:4, 6:11, 13:18)]
+
+
+kable(DEA_complete[c(1:100),], "html") %>%
+  kable_styling(full_width = F)
+```
+ 
+DEA Comparison with Illumina Top 100 Genes 
+
+```{r}
+illumina_genes <- read.table("~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",", header = TRUE)
+illumina_genes <- illumina_genes[order(illumina_genes$BH.adjusted.p.values, decreasing=FALSE),]
+illumina_genes <- illumina_genes[c(1:100), c(1,3,4)]
+illumina_genes$rank <- seq.int(nrow(illumina_genes))
+colnames(illumina_genes) <- c("Id", "FC_Illumina", "Adj_pval_Illumina", "Rank_Illumina")
+
+DEA_data <- DEA_data[order(DEA_data$BH.adjusted.p.values, decreasing=FALSE),]
+DEA_data$rank <- seq.int(nrow(DEA_data))
+
+Kit9_rows <- DEA_data[DEA_data$Id %in% illumina_genes$Id, ]
+Kit9_rows <- Kit9_rows[, c(1,3,7,23)]
+colnames(Kit9_rows) <- c("Id", "FC_Kit9_Lig_NO", "Adj_pval_Kit9_Lig_NO", "Rank_Kit9_Lig_NO" )
+
+illumina_vs_Kit9_DEA <- merge(illumina_genes, Kit9_rows, by = "Id")
+illumina_vs_Kit9_DEA <- illumina_vs_Kit9_DEA[order(illumina_vs_Kit9_DEA$Rank_Illumina, decreasing=FALSE),]
+
+
+
+kable(illumina_vs_Kit9_DEA, "html") %>%
+  kable_styling(full_width = F)
+```
+
 ## P2-Solo
+
+PCA
+
+```{r}
+norm_expression_data <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+
+# Create a matrix from our table of counts
+pca_matrix <- norm_expression_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+colours <- c("#B276B2", "#B276B2", "#B276B2", "#FAA43A", "#FAA43A", "#FAA43A")
+
+plot.PCA(pca_result, habillage = "ind", col.hab = colours, title = "PCA - Samples P2")
+```
+
+Volcano Plot
+
+```{r, echo=FALSE, fig.height=12, fig.width=15, message=FALSE, warning=FALSE}
+DEA_data <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header = TRUE, sep = '\t')
+nano_volcano <- EnhancedVolcano(DEA_data,
+                lab = DEA_data$Gene.name,
+                x = 'log2foldchange.LLO.vs.Neg',
+                y = 'BH.adjusted.p.values',
+                xlab = bquote(~Log[2]~ 'fold change'),
+                pCutoff = 0.05,
+                FCcutoff = 1,
+                pointSize = 2.0,
+                labSize = 5.0,
+                colAlpha = 1,
+                title = "Nanopore",
+                subtitle = NULL,
+                legendPosition = 'bottom',
+                legendLabSize = 12,
+                legendIconSize = 4.0,
+                drawConnectors = TRUE,
+                widthConnectors = 0.2,
+                xlim = c(-5,10))
+nano_volcano
+```
+
+MA Plots
+
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/MA_plot_P2.png")
+```
+
+ Table DEA
+```{r}
+DEA_data <- DEA_data[!is.na(DEA_data$log2foldchange.LLO.vs.Neg),]
+DEA_data <- DEA_data[!is.na(DEA_data$BH.adjusted.p.values),]
+
+DEA_data_sig <- DEA_data[, c(1,2,3,7)]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$log2foldchange.LLO.vs.Neg >=1 | DEA_data_sig$log2foldchange.LLO.vs.Neg <=(-1),]
+DEA_data_sig <- DEA_data_sig[DEA_data_sig$BH.adjusted.p.values < 0.05,]
+DEA_data_sig <- DEA_data_sig[order(DEA_data_sig$baseMean,decreasing=TRUE),]
+
+raw_expression_data <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_rawPooledCountMatrix.tsv', header = TRUE, sep = '\t')
+DEA_complete <- DEA_data_sig
+
+###Add raw expression counts
+DEG_list <- DEA_data_sig$Id
+
+# Step 1: Extract rows from df1 based on the list of IDs
+raw_rows <- raw_expression_data[raw_expression_data$Id %in% DEG_list, ]
+colnames(raw_rows) <- c("Id", "LLO1_raw", "LLO2_raw", "LLO3_raw", "Neg1_raw", "Neg2_raw", "Neg3_raw")
+norm_rows <- norm_expression_data[norm_expression_data$Id %in% DEG_list, ]
+colnames(norm_rows) <- c("Id", "LLO1_norm", "LLO2_norm", "LLO3_norm", "Neg1_norm", "Neg2_norm", "Neg3_norm")
+
+# Step 2: Add the extracted rows to df2
+DEA_complete <- cbind(DEA_complete, raw_rows)
+DEA_complete <- cbind(DEA_complete, norm_rows)
+DEA_complete <- DEA_complete[, c(1:4, 6:11, 13:18)]
+
+
+kable(DEA_complete[c(0:100),], "html") %>%
+  kable_styling(full_width = F)
+```
+ 
+DEA Comparison with Illumina Top 100 Genes 
+
+```{r}
+illumina_genes <- read.table("~/Documents/Kit14_Analysis/Illumina_DEG.csv", sep = ",", header = TRUE)
+illumina_genes <- illumina_genes[order(illumina_genes$BH.adjusted.p.values, decreasing=FALSE),]
+illumina_genes <- illumina_genes[c(1:100), c(1,3,4)]
+illumina_genes$rank <- seq.int(nrow(illumina_genes))
+colnames(illumina_genes) <- c("Id", "FC_Illumina", "Adj_pval_Illumina", "Rank_Illumina")
+
+DEA_data <- DEA_data[order(DEA_data$BH.adjusted.p.values, decreasing=FALSE),]
+DEA_data$rank <- seq.int(nrow(DEA_data))
+
+p2_rows <- DEA_data[DEA_data$Id %in% illumina_genes$Id, ]
+p2_rows <- p2_rows[, c(1,3,7,23)]
+colnames(p2_rows) <- c("Id", "FC_P2", "Adj_pval_P2", "Rank_P2" )
+
+illumina_vs_p2_DEA <- merge(illumina_genes, p2_rows, by = "Id")
+illumina_vs_p2_DEA <- illumina_vs_p2_DEA[order(illumina_vs_p2_DEA$Rank_Illumina, decreasing=FALSE),]
+
+
+
+kable(illumina_vs_p2_DEA, "html") %>%
+  kable_styling(full_width = F)
+```
+
 
 <!--chapter:end:02-Nanopore-Analyses.Rmd-->
 
@@ -98,24 +880,21 @@ genes_Kit11 <- genes_Kit11[,c(1,3,7,10)]
 colnames(genes_Kit11) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
 genes_Kit11$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit11$log2foldchange.LLO.vs.Neg)
 genes_Kit11$BH.adjusted.p.values <- as.numeric(genes_Kit11$BH.adjusted.p.values)
-genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$log2foldchange.LLO.vs.Neg),]
-genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$BH.adjusted.p.values),]
+
 
 genes_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
 genes_Kit9 <- genes_Kit9[,c(1,3,7,10)]
 colnames(genes_Kit9) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
 genes_Kit9$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit9$log2foldchange.LLO.vs.Neg)
 genes_Kit9$BH.adjusted.p.values <- as.numeric(genes_Kit9$BH.adjusted.p.values)
-genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$log2foldchange.LLO.vs.Neg),]
-genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$BH.adjusted.p.values),]
+
 
 genes_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
 genes_P2 <- genes_P2[,c(1,3,7,10)]
 colnames(genes_P2) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
 genes_P2$log2foldchange.LLO.vs.Neg <- as.numeric(genes_P2$log2foldchange.LLO.vs.Neg)
 genes_P2$BH.adjusted.p.values <- as.numeric(genes_P2$BH.adjusted.p.values)
-genes_P2 <- genes_P2[!is.na(genes_P2$log2foldchange.LLO.vs.Neg),]
-genes_P2 <- genes_P2[!is.na(genes_P2$BH.adjusted.p.values),]
+
 ```
 
 **PCA**
@@ -1035,8 +1814,22 @@ genes_P2_rank$rank <- seq.int(nrow(genes_P2_rank))
 ```
 
 Ranking of Illumina DEGs Table
-```{r}
-rank_genes_illumina <- merge(genes_Kit11_rank, genes_P2_rank, by = "Id")
+```{r message=FALSE, warning=FALSE}
+rank_genes_illumina <- merge(genes_illumina_rank, genes_Kit9_rank, by = "Id",  all=T)
+rank_genes_illumina <- rank_genes_illumina[,c(1,5,9,2,6,3,7)]
+rank_genes_illumina <- merge(rank_genes_illumina, genes_Kit11_rank, by = "Id", all=T)
+rank_genes_illumina <- rank_genes_illumina[,c(1,2,3,11,4,5,8 ,6,7,9)]
+rank_genes_illumina <- merge(rank_genes_illumina, genes_P2_rank, by = "Id", all=T)
+rank_genes_illumina <- rank_genes_illumina[,c(1,2,3,4,14,5,6,7,11,8,9,10,12)]
+colnames(rank_genes_illumina) <- c("Id", "Rank_Illumina", "Rank_Kit9", "Rank_Kit11", "Rank_P2", 
+                          "logFC_Illumina", "logFC_Kit9", "logFC_Kit11", "logFC_P2", 
+                          "Adj.pval_Illumina", "Adj.pval_Kit9", "Adj.pval_Kit11", "Adj.pval_P2")
+rank_genes_illumina <- rank_genes_illumina[order(rank_genes_illumina$Rank_Illumina),]
+
+kable(rank_genes_illumina, "html") %>%
+  kable_styling(full_width = F)
+```
+
 rank_genes_illumina <- rank_genes_illumina[,c(1,4,5,9)]
 rank_genes_illumina <- merge(rank_genes_illumina, genes_Kit11_DE, by = "Id")
 rank_genes_illumina <- rank_genes_illumina[,c(1:4,8)]
@@ -1044,10 +1837,6 @@ rank_genes_illumina <- merge(rank_genes_illumina, genes_P2_DE, by = "Id")
 rank_genes_illumina <- rank_genes_illumina[,c(1:5,9)]
 colnames(rank_genes_illumina) <- c("Id", "Symbol", "Rank_Illumina", "Rank_Kit9", "Rank_Kit11", "Rank_P2")
 rank_genes_illumina <- rank_genes_illumina[order(rank_genes_illumina$Rank_Illumina),]
-
-kable(rank_genes_illumina, "html") %>%
-  kable_styling(full_width = F)
-```
 
 **Differential Genes Lists + Rank**
 
@@ -1057,16 +1846,22 @@ genes_illumina_DE <- genes_illumina_DE[genes_illumina_DE$BH.adjusted.p.values < 
 genes_illumina_DE <- genes_illumina_DE[order(genes_illumina_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
 genes_illumina_DE$rank <- seq.int(nrow(genes_illumina_DE))
 
+genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$log2foldchange.LLO.vs.Neg),]
+genes_Kit11 <- genes_Kit11[!is.na(genes_Kit11$BH.adjusted.p.values),]
 genes_Kit11_DE <- genes_Kit11[genes_Kit11$log2foldchange.LLO.vs.Neg >=1 | genes_Kit11$log2foldchange.LLO.vs.Neg <=(-1),]
 genes_Kit11_DE <- genes_Kit11_DE[genes_Kit11_DE$BH.adjusted.p.values < 0.05,]
 genes_Kit11_DE <- genes_Kit11_DE[order(genes_Kit11_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
 genes_Kit11_DE$rank <- seq.int(nrow(genes_Kit11_DE))
 
+genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$log2foldchange.LLO.vs.Neg),]
+genes_Kit9 <- genes_Kit9[!is.na(genes_Kit9$BH.adjusted.p.values),]
 genes_Kit9_DE <- genes_Kit9[genes_Kit9$log2foldchange.LLO.vs.Neg >=1 | genes_Kit9$log2foldchange.LLO.vs.Neg <=(-1),]
 genes_Kit9_DE <- genes_Kit9_DE[genes_Kit9_DE$BH.adjusted.p.values < 0.05,]
 genes_Kit9_DE <- genes_Kit9_DE[order(genes_Kit9_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
 genes_Kit9_DE$rank <- seq.int(nrow(genes_Kit9_DE))
 
+genes_P2 <- genes_P2[!is.na(genes_P2$log2foldchange.LLO.vs.Neg),]
+genes_P2 <- genes_P2[!is.na(genes_P2$BH.adjusted.p.values),]
 genes_P2_DE <- genes_P2[genes_P2$log2foldchange.LLO.vs.Neg >=1 | genes_P2$log2foldchange.LLO.vs.Neg <=(-1),]
 genes_P2_DE <- genes_P2_DE[genes_P2_DE$BH.adjusted.p.values < 0.05,]
 genes_P2_DE <- genes_P2_DE[order(genes_P2_DE$log2foldchange.LLO.vs.Neg,decreasing=TRUE),]
@@ -1093,7 +1888,7 @@ kable(rank_genes, "html") %>%
 
 
 **Venn Diagram Differentially Expressed Genes Shared Between Protocols**
-```{r, echo=FALSE, fig.height=12, fig.width=15,}
+```{r, echo=FALSE, fig.height=12, fig.width=15}
 P2_Illumina <- venn.diagram(
   x = list(genes_illumina_DE$Id, genes_P2_DE$Id),
   category.names = c(paste0("Illumina (", nrow(genes_illumina_DE), ")"), 
@@ -1170,4 +1965,599 @@ ggarrange(Kit9_Kit11_P2, Kit9_Kit11_Illumina, P2_Illumina, Kit9_Kit11_Illumina_P
 
 
 <!--chapter:end:03-Illumina_vs_Nanopore.Rmd-->
+
+# Samples Analysis
+
+Load Data
+```{r, message=FALSE, warning=FALSE}
+library(FactoMineR)
+library(readxl)
+library(ggrepel)
+library(ggplot2)
+library(ggpubr)
+library(kableExtra)
+library(tidyverse)
+library(hrbrthemes)
+library(gespeR)
+library(stats)
+```
+
+Load Data
+```{r}
+#Normalised Count Data
+count_illumina <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+count_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+```
+
+**PCA By Samples**
+```{r, fig.height=15, fig.width=15}
+LLO1_pca_matrix <- count_illumina[,c(1,2)]
+LLO1_pca_matrix <- cbind(LLO1_pca_matrix, count_Kit9$LLO1, count_Kit11$LLO1, count_P2$LLO1)
+colnames(LLO1_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+LLO1_pca_matrix <- LLO1_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO1_pca_result <- PCA(LLO1_pca_matrix, graph = FALSE)
+LLO1_plot <- plot.PCA(LLO1_pca_result, title = "PCA - Sample LLO1")
+
+LLO2_pca_matrix <- count_illumina[,c(1,3)]
+LLO2_pca_matrix <- cbind(LLO2_pca_matrix, count_Kit9$LLO2, count_Kit11$LLO2, count_P2$LLO2)
+colnames(LLO2_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+LLO2_pca_matrix <- LLO2_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO2_pca_result <- PCA(LLO2_pca_matrix, graph = FALSE)
+LLO2_plot <- plot.PCA(LLO2_pca_result, title = "PCA - Sample LLO2")
+
+LLO3_pca_matrix <- count_illumina[,c(1,4)]
+LLO3_pca_matrix <- cbind(LLO3_pca_matrix, count_Kit9$LLO3, count_Kit11$LLO3, count_P2$LLO3)
+colnames(LLO3_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+LLO3_pca_matrix <- LLO3_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO3_pca_result <- PCA(LLO3_pca_matrix, graph = FALSE)
+LLO3_plot <- plot.PCA(LLO3_pca_result, title = "PCA - Sample LLO3")
+
+
+Neg1_pca_matrix <- count_illumina[,c(1,5)]
+Neg1_pca_matrix <- cbind(Neg1_pca_matrix, count_Kit9$Neg1, count_Kit11$Neg1, count_P2$Neg1)
+colnames(Neg1_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+Neg1_pca_matrix <- Neg1_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+Neg1_pca_result <- PCA(Neg1_pca_matrix, graph = FALSE)
+Neg1_plot <- plot.PCA(Neg1_pca_result, title = "PCA - Sample Neg1")
+
+Neg2_pca_matrix <- count_illumina[,c(1,6)]
+Neg2_pca_matrix <- cbind(Neg2_pca_matrix, count_Kit9$Neg2, count_Kit11$Neg2, count_P2$Neg2)
+colnames(Neg2_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+Neg2_pca_matrix <- Neg2_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+Neg2_pca_result <- PCA(Neg2_pca_matrix, graph = FALSE)
+Neg2_plot <- plot.PCA(Neg2_pca_result, title = "PCA - Sample Neg2")
+
+Neg3_pca_matrix <- count_illumina[,c(1,7)]
+Neg3_pca_matrix <- cbind(Neg3_pca_matrix, count_Kit9$Neg3, count_Kit11$Neg3, count_P2$Neg3)
+colnames(Neg3_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+Neg3_pca_matrix <- Neg3_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+Neg3_pca_result <- PCA(Neg3_pca_matrix, graph = FALSE)
+Neg3_plot <- plot.PCA(Neg3_pca_result, title = "PCA - Sample Neg3")
+
+
+ggarrange(LLO1_plot, LLO2_plot, LLO3_plot,
+          Neg1_plot, Neg2_plot, Neg3_plot,
+          nrow=2, ncol=3)
+
+```
+
+**Normalise Data using scale**
+
+```{r}
+LLO1_pca_matrix <- count_illumina[,c(1,2)]
+LLO1_pca_matrix <- cbind(LLO1_pca_matrix, count_Kit9$LLO1, count_Kit11$LLO1, count_P2$LLO1)
+colnames(LLO1_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+rownames(LLO1_pca_matrix) <- LLO1_pca_matrix$Id
+LLO1_pca_matrix <- LLO1_pca_matrix[,c(2:5)]
+
+scaled_data <- as.data.frame(scale(LLO1_pca_matrix))
+scaled_data$Id <- rownames(scaled_data)
+rownames(scaled_data) <- seq_len(nrow(scaled_data))
+scaled_data <- scaled_data[,c(5,1:4)]
+
+pca_matrix <- scaled_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+
+
+# Step 1: Standardize the data
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+
+plot.PCA(pca_result, title = "PCA - Samples Kit9")
+
+```
+
+**Count Matrices**
+
+LLO1
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(LLO1_P2_Illu, LLO1_Kit9_Illu, LLO1_Kit11_Illu,
+          LLO1_Kit9_P2, LLO1_Kit11_P2, LLO1_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+LLO2
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(LLO2_P2_Illu, LLO2_Kit9_Illu, LLO2_Kit11_Illu,
+          LLO2_Kit9_P2, LLO2_Kit11_P2, LLO2_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+
+LLO3
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(LLO3_P2_Illu, LLO3_Kit9_Illu, LLO3_Kit11_Illu,
+          LLO3_Kit9_P2, LLO3_Kit11_P2, LLO3_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+Neg1
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(Neg1_P2_Illu, Neg1_Kit9_Illu, Neg1_Kit11_Illu,
+          Neg1_Kit9_P2, Neg1_Kit11_P2, Neg1_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+Neg2
+
+```{r, fig.height=20, fig.width=10}
+ggarrange(Neg2_P2_Illu, Neg2_Kit9_Illu, Neg2_Kit11_Illu,
+          Neg2_Kit9_P2, Neg2_Kit11_P2, Neg2_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+Neg3
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(Neg3_P2_Illu, Neg3_Kit9_Illu, Neg3_Kit11_Illu,
+          Neg3_Kit9_P2, Neg3_Kit11_P2, Neg3_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+<!--chapter:end:04-Sample_Analysis.Rmd-->
+
+# Illumina Neg Samples
+
+Quality check of Illumina Neg samples as gene expression should be similar between our samples and those of Vinko.
+
+
+```{r}
+MC_genes <- read_excel('~/Documents/Kit14_Analysis/MC_lab_DEA.xlsx')
+colnames(MC_genes) <- c("Id", "Symbol", "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values")
+MC_genes$log2foldchange.LLO.vs.Neg <- as.numeric(MC_genes$log2foldchange.LLO.vs.Neg)    
+MC_genes$BH.adjusted.p.values <- as.numeric(MC_genes$BH.adjusted.p.values)    
+MC_genes <- MC_genes[!is.na(MC_genes$log2foldchange.LLO.vs.Neg),]
+MC_genes <- MC_genes[!is.na(MC_genes$BH.adjusted.p.values),]
+
+plot(count_illumina$Neg1, MC_genes$Neg1)
+print(MC_genes)
+```
+
+
+<!--chapter:end:05-Illumina_Neg_Samples.Rmd-->
+
+# Mitochondrial Genes
+```{r, message=FALSE, warning=FALSE}
+library(FactoMineR)
+library(readxl)
+library(ggrepel)
+library(ggplot2)
+library(ggpubr)
+library(kableExtra)
+library(tidyverse)
+library(hrbrthemes)
+library(tm)
+library(proustr)
+library(VennDiagram)
+library(gespeR)
+library(EnhancedVolcano)
+library(FoldGO)
+library(topGO)
+library(org.Hs.eg.db)
+library(clusterProfiler)
+```
+
+**Load Normalised Expression and DESeq2 Data**
+```{r echo=TRUE, message=FALSE, warning=FALSE}
+#Normalised Count Data
+count_illumina <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+count_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+
+#DESeq2
+convert_commas_to_periods <- function(df, columns) {
+  for (col in columns) {
+    df[[col]] <- as.numeric(gsub(",", ".", df[[col]]))
+  }
+  return(df)
+}
+
+# Specify the columns to convert commas to periods
+columns_to_convert <- c("log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values")
+
+genes_illumina <- read_csv('~/shares-net/sequencages/analyses/cDNAKit14_A2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.csv')
+genes_illumina <- genes_illumina[,c(1,3,7,10)]
+colnames(genes_illumina) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_illumina <- convert_commas_to_periods(genes_illumina, columns_to_convert)
+genes_illumina <- genes_illumina[!is.na(genes_illumina$log2foldchange.LLO.vs.Neg),]
+genes_illumina <- genes_illumina[!is.na(genes_illumina$BH.adjusted.p.values),]
+
+genes_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_Kit11 <- genes_Kit11[,c(1,3,7,10)]
+colnames(genes_Kit11) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_Kit11$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit11$log2foldchange.LLO.vs.Neg)
+genes_Kit11$BH.adjusted.p.values <- as.numeric(genes_Kit11$BH.adjusted.p.values)
+
+
+genes_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_Kit9 <- genes_Kit9[,c(1,3,7,10)]
+colnames(genes_Kit9) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_Kit9$log2foldchange.LLO.vs.Neg <- as.numeric(genes_Kit9$log2foldchange.LLO.vs.Neg)
+genes_Kit9$BH.adjusted.p.values <- as.numeric(genes_Kit9$BH.adjusted.p.values)
+
+
+genes_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/diffanaresultsannotation_output/diffanaresultsannotation_deseq2_Experiment1-diffana_LLO_vs_Neg.tsv', header =TRUE, sep='\t')
+genes_P2 <- genes_P2[,c(1,3,7,10)]
+colnames(genes_P2) <- c('Id', "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values", "Symbol")
+genes_P2$log2foldchange.LLO.vs.Neg <- as.numeric(genes_P2$log2foldchange.LLO.vs.Neg)
+genes_P2$BH.adjusted.p.values <- as.numeric(genes_P2$BH.adjusted.p.values)
+
+```
+
+**Remove Mitochondrial Genes**
+
+
+```{r}
+mito_genes <- read.table("~/Documents/Kit14_Analysis/mito_genes_filt.txt", header=TRUE)
+print(mito_genes)
+
+count_illumina_filt <- count_illumina[!(count_illumina$Id %in% mito_genes$EnsemblGeneID), ]  
+count_Kit9_filt <- count_Kit9[!(count_Kit9$Id %in% mito_genes$EnsemblGeneID), ]  
+count_Kit11_filt <- count_Kit11[!(count_Kit11$Id %in% mito_genes$EnsemblGeneID), ]  
+count_P2_filt <- count_P2[!(count_P2$Id %in% mito_genes$EnsemblGeneID), ]  
+
+```
+
+
+**PCA**
+
+```{r}
+LLO1_filt_pca_matrix <- count_illumina_filt[,c(1,2)]
+LLO1_filt_pca_matrix <- cbind(LLO1_filt_pca_matrix, count_Kit9_filt$LLO1, count_Kit11_filt$LLO1, count_P2_filt$LLO1)
+colnames(LLO1_filt_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+rownames(LLO1_filt_pca_matrix) <- NULL
+
+LLO1_filt_pca_matrix <- LLO1_filt_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO1_filt_pca_result <- PCA(LLO1_filt_pca_matrix, graph = FALSE)
+LLO1_filt_plot <- plot.PCA(LLO1_filt_pca_result, title = "PCA - Sample LLO1")
+
+LLO1_filt_plot
+
+# Create a matrix from our table of counts
+Illumina_filt_pca_matrix <- count_illumina_filt %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+Kit9_filt_pca_matrix <- count_Kit9_filt %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+
+Kit11_filt_pca_matrix <- count_Kit11_filt %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+
+P2_filt_pca_matrix <- count_P2_filt %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+
+Illumina_pca_result <- PCA(Illumina_pca_matrix, graph = FALSE)
+Kit11_pca_result <- PCA(Kit11_pca_matrix, graph = FALSE) 
+P2_pca_result <- PCA(P2_pca_matrix, graph = FALSE)
+
+combined_pca_matrix <- cbind(Illumina_pca_matrix, Kit11_pca_matrix)
+combined_pca_matrix <- cbind(combined_pca_matrix, P2_pca_matrix)
+combined_pca_result <- PCA(combined_pca_matrix, graph = FALSE)
+variance_dim1 <- round(combined_pca_result$eig[1, "percentage of variance"], 2)
+variance_dim2 <- round(combined_pca_result$eig[2, "percentage of variance"], 2)
+
+# Create a dataframe for PCA results
+Illumina_pca_df <- as.data.frame(Illumina_pca_result$ind$coord)
+
+# Map the colours to appropriate labels
+Illumina_pca_df$condition <- c(rep("LLO", 3),
+                          rep("Neg", 3))
+Illumina_pca_df$protocol  <- c(rep("Illumina", 6))
+Illumina_pca_df$samples <- rownames(Illumina_pca_df)
+
+
+P2_pca_df <- as.data.frame(P2_pca_result$ind$coord)
+P2_pca_df$condition  <- c(rep("LLO", 3),
+                          rep("Neg", 3))
+P2_pca_df$protocol  <- c(rep("P2_Kit11", 6))
+P2_pca_df$samples <- rownames(P2_pca_df)
+
+
+Kit11_pca_df <- as.data.frame(Kit11_pca_result$ind$coord)
+
+Kit11_pca_df$condition  <- c(rep("LLO", 3),
+                          rep("Neg", 3))
+Kit11_pca_df$protocol  <- c(rep("Kit11", 6))
+Kit11_pca_df$samples <- rownames(Kit11_pca_df)
+
+
+# Combine the dataframes
+combined_pca_df <- rbind(Illumina_pca_df, P2_pca_df, Kit11_pca_df)
+
+# Create a custom PCA plot using ggplot2
+pca_plot <- ggplot(combined_pca_df, aes(x = Dim.1, y = Dim.2, color = condition, shape = protocol, label = samples)) +
+  geom_point(size = 3) +
+  geom_text_repel(size = 3)  +  # Add text labels with a slight offset
+  scale_color_manual(values = c(Neg = "#B276B2", LLO = "#FAA43A")) +
+  scale_shape_manual(values = c(Illumina = "circle", P2_Kit11 = "square", Kit11 = "triangle")) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey75") +  # Add horizontal line at y = 0
+  geom_vline(xintercept = 0, linetype = "dashed", color = "grey75") +  # Add vertical line at x = 0
+  labs(title = "PCA - All Samples",
+       x = paste0("Dim.1 (", variance_dim1, "%)"),
+       y = paste0("Dim.2 (", variance_dim2, "%)"))
+
+print(pca_plot)
+
+```
+
+<!--chapter:end:06-Mitochondrial_Genes.Rmd-->
+
+# DEA Methods
+
+
+**Batch Effect**
+```{r}
+library("DESeq2")
+data_P2 <-read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header=TRUE, sep='\t')
+data_Illumina <-read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header=TRUE, sep='\t')
+
+raw_counts <- merge(data_P2, data_Illumina, by = "Id")
+colnames(raw_counts) <- c("Id", 
+                          "LLO1", "LLO2", "LLO3", "Neg1", "Neg2", "Neg3",
+                          "LLO4", "LLO5", "LLO6", "Neg4", "Neg5", "Neg6")
+rownames(raw_counts) <- raw_counts$Id
+raw_counts <- raw_counts[, c(2:13)]
+raw_counts <- round(raw_counts)
+
+annotation <- data.frame(matrix(ncol = 3, nrow = 12))
+colnames(annotation) <- c("sample", "condition", "batch")
+annotation$sample <- c("LLO1", "LLO2", "LLO3", "Neg1", "Neg2", "Neg3",
+                      "LLO4", "LLO5", "LLO6", "Neg4", "Neg5", "Neg6")
+annotation$condition <- c("LLO", "LLO", "LLO", "Neg", "Neg", "Neg",
+                          "LLO", "LLO", "LLO", "Neg", "Neg", "Neg")
+annotation$batch <- c("P2", "P2", "P2", "P2", "P2", "P2",
+                      "Illumina", "Illumina", "Illumina", "Illumina", "Illumina", "Illumina")
+
+
+
+dds <- DESeqDataSetFromMatrix(countData = raw_counts,
+                              colData = annotation,
+                              design = ~ batch + condition)
+
+# Step 2: Statistical Analysis
+# Perform differential expression analysis
+dds <- DESeq(dds)
+
+# Step 3: Multiple Testing Correction
+# Adjust p-values for multiple testing
+results <- results(dds)
+results$padj <- p.adjust(results$pvalue, method = "BH")
+
+# Filter differentially expressed genes based on adjusted p-value and log2 fold change thresholds
+DEGs <- subset(results, padj < 0.05 & abs(log2FoldChange) > 1)
+
+DEGs <- data.frame(DEGs)
+DEGs$Id <- rownames(DEGs)
+# View the list of differentially expressed genes
+print(DEGs)
+```
+**Venn Diagram Differentially Expressed Genes Shared Between Protocols**
+```{r, echo=FALSE}
+batch_effect_ven <- venn.diagram(
+  x = list(DEGs$Id, genes_illumina_DE$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Batch Effect (", nrow(DEGs), ")"), 
+                     paste0("Illumina (", nrow(genes_illumina_DE), ")") , 
+                     paste0("P2 (", nrow(genes_P2_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff',  "gold"),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3), alpha('gold',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-10, 10, 180),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff', "darkorange"))
+
+
+batch_effect_removed <- venn.diagram(
+  x = list(DEGs$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Illumina (", nrow(genes_illumina_DE), ")"), 
+                     paste0("P2 (", nrow(DEGs), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff'),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-27, 27),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff'))
+
+
+P2_Illumina <- venn.diagram(
+  x = list(genes_illumina_DE$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Illumina (", nrow(genes_illumina_DE), ")"), 
+                     paste0("P2 (", nrow(genes_P2_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff'),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-27, 27),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff'))
+
+
+ggarrange(P2_Illumina, batch_effect_removed, ncol = 2, nrow=1, labels = c("Batch Effect", "No Batch Effect"),
+          label.x = 0,
+          label.y = 1)
+
+```
+
+**EdgeR**
+
+```{r}
+library(edgeR)
+
+Counts <-read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022//deseq2_output/deseq2_Experiment1-normalisation_rawCountMatrix.tsv', header=TRUE, sep='\t', row.names=1)
+colnames(Counts) <- c("Neg1", "Neg2",  "Neg3", "LLO1", "LLO2", "LLO3")
+dim(Counts)
+head(Counts)
+
+
+dgList <- DGEList(counts=Counts, genes=rownames(Counts))
+dgList
+dgList$samples
+head(dgList$counts) #Many rows!
+head(dgList$genes) #Likewise!
+
+countsPerMillion <- cpm(dgList)
+summary(countsPerMillion)
+
+countCheck <- countsPerMillion > 1
+head(countCheck)
+keep <- which(rowSums(countCheck) >= 2)
+dgList <- dgList[keep,]
+summary(cpm(dgList))
+dgList <- calcNormFactors(dgList, method="TMM")
+
+plotMDS(dgList)
+
+sampleType<- rep("Neg", ncol(dgList)) #N=normal; T=tumour
+sampleType[grep("LLO", colnames(dgList))] <- "T"
+#'grep' is a string matching function.
+sampleReplicate <- paste("S", rep(1:3, each=2), sep="")
+designMat <- model.matrix(~sampleReplicate + sampleType)
+designMat
+
+dgList <- estimateGLMCommonDisp(dgList, design=designMat)
+dgList <- estimateGLMTrendedDisp(dgList, design=designMat)
+dgList <- estimateGLMTagwiseDisp(dgList, design=designMat)
+
+plotBCV(dgList)
+
+fit <- glmFit(dgList, designMat)
+lrt <- glmLRT(fit, coef=ncol(fit$design))
+edgeR_result <- topTags(lrt)
+
+edgeR_result<- data.frame(edgeR_result)
+deGenes <- decideTestsDGE(lrt, p=0.05)
+deGenes <- rownames(lrt)[as.logical(deGenes)]
+plotSmear(lrt, de.tags=deGenes)
+abline(h=c(-1, 1), col=2)
+
+deGenes <- data.frame(deGenes)
+print(deGenes)
+```
+
+```{r}
+
+colnames(deGenes) <- c("Id")
+
+overlap_illumina <- merge(deGenes_P2, deGenes, by="Id" )
+
+print(overlap_illumina)
+print(deGenes)
+```
+
+
+
+**Towards Data Science**
+```{r}
+library("edgeR")
+
+readCount <- read.table(file = "~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv", header = T, row.names = 1, stringsAsFactors = F, check.names = F)
+conditions <- c("LLO", "LLO", "LLO", "Neg", "Neg", "Neg")
+conditions <- factor(t(conditions))# edgeR TMM normalize
+y <- DGEList(counts = readCount, group = conditions)## Remove rows conssitently have zero or very low counts
+keep <- filterByExpr(y)
+y <- y[keep, keep.lib.sizes = FALSE]## Perform TMM normalization and convert to CPM (Counts Per Million)
+y <- calcNormFactors(y, method = "TMM")
+count_norm <- cpm(y)
+count_norm <- as.data.frame(count_norm)# Run the Wilcoxon rank-sum test for each gene
+pvalues <- sapply(1:nrow(count_norm), function(i){
+  data <- cbind.data.frame(gene = as.numeric(t(count_norm[i,])), conditions)
+  p <- wilcox.test(gene~conditions, data)$p.value
+  return(p)})
+fdr <- p.adjust(pvalues, method = "fdr")# Calculate the fold-change for each gene
+conditionsLevel <- levels(conditions)
+dataCon1 <- count_norm[,c(which(conditions==conditionsLevel[1]))]
+dataCon2 <- count_norm[,c(which(conditions==conditionsLevel[2]))]
+foldChanges <- log2(rowMeans(dataCon2)/rowMeans(dataCon1))# Output results based on the FDR threshold 0.05
+outRst <- data.frame(log2foldChange = foldChanges, pValues = pvalues, FDR = fdr)
+rownames(outRst) <- rownames(count_norm)
+outRst <- na.omit(outRst)
+fdrThres <- 0.05
+outRst <- outRst[outRst$FDR<fdrThres,]
+```
+
+
+<!--chapter:end:07-EdgeR.Rmd-->
 

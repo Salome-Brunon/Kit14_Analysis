@@ -1,0 +1,17 @@
+# Illumina Neg Samples
+
+Quality check of Illumina Neg samples as gene expression should be similar between our samples and those of Vinko.
+
+
+```{r}
+MC_genes <- read_excel('~/Documents/Kit14_Analysis/MC_lab_DEA.xlsx')
+colnames(MC_genes) <- c("Id", "Symbol", "log2foldchange.LLO.vs.Neg", "BH.adjusted.p.values")
+MC_genes$log2foldchange.LLO.vs.Neg <- as.numeric(MC_genes$log2foldchange.LLO.vs.Neg)    
+MC_genes$BH.adjusted.p.values <- as.numeric(MC_genes$BH.adjusted.p.values)    
+MC_genes <- MC_genes[!is.na(MC_genes$log2foldchange.LLO.vs.Neg),]
+MC_genes <- MC_genes[!is.na(MC_genes$BH.adjusted.p.values),]
+
+plot(count_illumina$Neg1, MC_genes$Neg1)
+print(MC_genes)
+```
+

@@ -1,0 +1,182 @@
+# Samples Analysis
+
+Load Data
+```{r, message=FALSE, warning=FALSE}
+library(FactoMineR)
+library(readxl)
+library(ggrepel)
+library(ggplot2)
+library(ggpubr)
+library(kableExtra)
+library(tidyverse)
+library(hrbrthemes)
+library(gespeR)
+library(stats)
+```
+
+Load Data
+```{r}
+#Normalised Count Data
+count_illumina <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header = TRUE, sep = '\t')
+count_Kit11 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_Kit9 <- read.table('~/shares-net/sequencages/analyses/cDNAKit14_B2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+count_P2 <- read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header =TRUE, sep='\t')
+```
+
+**PCA By Samples**
+```{r, fig.height=15, fig.width=15}
+LLO1_pca_matrix <- count_illumina[,c(1,2)]
+LLO1_pca_matrix <- cbind(LLO1_pca_matrix, count_Kit9$LLO1, count_Kit11$LLO1, count_P2$LLO1)
+colnames(LLO1_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+LLO1_pca_matrix <- LLO1_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO1_pca_result <- PCA(LLO1_pca_matrix, graph = FALSE)
+LLO1_plot <- plot.PCA(LLO1_pca_result, title = "PCA - Sample LLO1")
+
+LLO2_pca_matrix <- count_illumina[,c(1,3)]
+LLO2_pca_matrix <- cbind(LLO2_pca_matrix, count_Kit9$LLO2, count_Kit11$LLO2, count_P2$LLO2)
+colnames(LLO2_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+LLO2_pca_matrix <- LLO2_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO2_pca_result <- PCA(LLO2_pca_matrix, graph = FALSE)
+LLO2_plot <- plot.PCA(LLO2_pca_result, title = "PCA - Sample LLO2")
+
+LLO3_pca_matrix <- count_illumina[,c(1,4)]
+LLO3_pca_matrix <- cbind(LLO3_pca_matrix, count_Kit9$LLO3, count_Kit11$LLO3, count_P2$LLO3)
+colnames(LLO3_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+LLO3_pca_matrix <- LLO3_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+LLO3_pca_result <- PCA(LLO3_pca_matrix, graph = FALSE)
+LLO3_plot <- plot.PCA(LLO3_pca_result, title = "PCA - Sample LLO3")
+
+
+Neg1_pca_matrix <- count_illumina[,c(1,5)]
+Neg1_pca_matrix <- cbind(Neg1_pca_matrix, count_Kit9$Neg1, count_Kit11$Neg1, count_P2$Neg1)
+colnames(Neg1_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+Neg1_pca_matrix <- Neg1_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+Neg1_pca_result <- PCA(Neg1_pca_matrix, graph = FALSE)
+Neg1_plot <- plot.PCA(Neg1_pca_result, title = "PCA - Sample Neg1")
+
+Neg2_pca_matrix <- count_illumina[,c(1,6)]
+Neg2_pca_matrix <- cbind(Neg2_pca_matrix, count_Kit9$Neg2, count_Kit11$Neg2, count_P2$Neg2)
+colnames(Neg2_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+Neg2_pca_matrix <- Neg2_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+Neg2_pca_result <- PCA(Neg2_pca_matrix, graph = FALSE)
+Neg2_plot <- plot.PCA(Neg2_pca_result, title = "PCA - Sample Neg2")
+
+Neg3_pca_matrix <- count_illumina[,c(1,7)]
+Neg3_pca_matrix <- cbind(Neg3_pca_matrix, count_Kit9$Neg3, count_Kit11$Neg3, count_P2$Neg3)
+colnames(Neg3_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+Neg3_pca_matrix <- Neg3_pca_matrix %>% 
+  column_to_rownames("Id") %>% 
+  as.matrix() %>% 
+  t()
+Neg3_pca_result <- PCA(Neg3_pca_matrix, graph = FALSE)
+Neg3_plot <- plot.PCA(Neg3_pca_result, title = "PCA - Sample Neg3")
+
+
+ggarrange(LLO1_plot, LLO2_plot, LLO3_plot,
+          Neg1_plot, Neg2_plot, Neg3_plot,
+          nrow=2, ncol=3)
+
+```
+
+**Normalise Data using scale**
+
+```{r}
+LLO1_pca_matrix <- count_illumina[,c(1,2)]
+LLO1_pca_matrix <- cbind(LLO1_pca_matrix, count_Kit9$LLO1, count_Kit11$LLO1, count_P2$LLO1)
+colnames(LLO1_pca_matrix) <- c("Id", "Illumina", "Kit9", "Kit11", "P2")
+rownames(LLO1_pca_matrix) <- LLO1_pca_matrix$Id
+LLO1_pca_matrix <- LLO1_pca_matrix[,c(2:5)]
+
+scaled_data <- as.data.frame(scale(LLO1_pca_matrix))
+scaled_data$Id <- rownames(scaled_data)
+rownames(scaled_data) <- seq_len(nrow(scaled_data))
+scaled_data <- scaled_data[,c(5,1:4)]
+
+pca_matrix <- scaled_data %>% 
+  # make the "gene" column become the rownames of the table
+  column_to_rownames("Id") %>% 
+  # coerce to a matrix
+  as.matrix() %>% 
+  # transpose the matrix so that rows = samples and columns = variables
+  t()
+
+
+
+# Step 1: Standardize the data
+
+pca_result <- PCA(pca_matrix, graph = FALSE)
+
+plot.PCA(pca_result, title = "PCA - Samples Kit9")
+
+```
+
+**Count Matrices**
+
+LLO1
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(LLO1_P2_Illu, LLO1_Kit9_Illu, LLO1_Kit11_Illu,
+          LLO1_Kit9_P2, LLO1_Kit11_P2, LLO1_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+LLO2
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(LLO2_P2_Illu, LLO2_Kit9_Illu, LLO2_Kit11_Illu,
+          LLO2_Kit9_P2, LLO2_Kit11_P2, LLO2_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+
+LLO3
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(LLO3_P2_Illu, LLO3_Kit9_Illu, LLO3_Kit11_Illu,
+          LLO3_Kit9_P2, LLO3_Kit11_P2, LLO3_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+Neg1
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(Neg1_P2_Illu, Neg1_Kit9_Illu, Neg1_Kit11_Illu,
+          Neg1_Kit9_P2, Neg1_Kit11_P2, Neg1_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+Neg2
+
+```{r, fig.height=20, fig.width=10}
+ggarrange(Neg2_P2_Illu, Neg2_Kit9_Illu, Neg2_Kit11_Illu,
+          Neg2_Kit9_P2, Neg2_Kit11_P2, Neg2_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```
+
+Neg3
+
+```{r, fig.height=20, fig.width=10}
+
+ggarrange(Neg3_P2_Illu, Neg3_Kit9_Illu, Neg3_Kit11_Illu,
+          Neg3_Kit9_P2, Neg3_Kit11_P2, Neg3_Kit11_Kit9,
+          nrow=3, ncol = 2, common.legend = TRUE)
+```

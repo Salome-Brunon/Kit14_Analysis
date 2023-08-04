@@ -21,6 +21,9 @@ Les échantillions proviennent tous des mêmes tubes.
 knitr::include_graphics("~/Kit14_Analysis/read_length_distributions_11and9.png")
 ```
 
+```{r, echo=FALSE}
+knitr::include_graphics("~/Kit14_Analysis/Methods_DEA.png")
+```
 
 ```{r include=FALSE}
 # automatically create a bib database for R packages

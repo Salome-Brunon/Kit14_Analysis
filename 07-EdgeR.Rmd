@@ -1,0 +1,206 @@
+# DEA Methods
+
+
+**Batch Effect**
+```{r}
+library("DESeq2")
+data_P2 <-read.table('~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header=TRUE, sep='\t')
+data_Illumina <-read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv', header=TRUE, sep='\t')
+
+raw_counts <- merge(data_P2, data_Illumina, by = "Id")
+colnames(raw_counts) <- c("Id", 
+                          "LLO1", "LLO2", "LLO3", "Neg1", "Neg2", "Neg3",
+                          "LLO4", "LLO5", "LLO6", "Neg4", "Neg5", "Neg6")
+rownames(raw_counts) <- raw_counts$Id
+raw_counts <- raw_counts[, c(2:13)]
+raw_counts <- round(raw_counts)
+
+annotation <- data.frame(matrix(ncol = 3, nrow = 12))
+colnames(annotation) <- c("sample", "condition", "batch")
+annotation$sample <- c("LLO1", "LLO2", "LLO3", "Neg1", "Neg2", "Neg3",
+                      "LLO4", "LLO5", "LLO6", "Neg4", "Neg5", "Neg6")
+annotation$condition <- c("LLO", "LLO", "LLO", "Neg", "Neg", "Neg",
+                          "LLO", "LLO", "LLO", "Neg", "Neg", "Neg")
+annotation$batch <- c("P2", "P2", "P2", "P2", "P2", "P2",
+                      "Illumina", "Illumina", "Illumina", "Illumina", "Illumina", "Illumina")
+
+
+
+dds <- DESeqDataSetFromMatrix(countData = raw_counts,
+                              colData = annotation,
+                              design = ~ batch + condition)
+
+# Step 2: Statistical Analysis
+# Perform differential expression analysis
+dds <- DESeq(dds)
+
+# Step 3: Multiple Testing Correction
+# Adjust p-values for multiple testing
+results <- results(dds)
+results$padj <- p.adjust(results$pvalue, method = "BH")
+
+# Filter differentially expressed genes based on adjusted p-value and log2 fold change thresholds
+DEGs <- subset(results, padj < 0.05 & abs(log2FoldChange) > 1)
+
+DEGs <- data.frame(DEGs)
+DEGs$Id <- rownames(DEGs)
+# View the list of differentially expressed genes
+print(DEGs)
+```
+**Venn Diagram Differentially Expressed Genes Shared Between Protocols**
+```{r, echo=FALSE}
+batch_effect_ven <- venn.diagram(
+  x = list(DEGs$Id, genes_illumina_DE$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Batch Effect (", nrow(DEGs), ")"), 
+                     paste0("Illumina (", nrow(genes_illumina_DE), ")") , 
+                     paste0("P2 (", nrow(genes_P2_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff',  "gold"),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3), alpha('gold',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-10, 10, 180),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff', "darkorange"))
+
+
+batch_effect_removed <- venn.diagram(
+  x = list(DEGs$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Illumina (", nrow(genes_illumina_DE), ")"), 
+                     paste0("P2 (", nrow(DEGs), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff'),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-27, 27),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff'))
+
+
+P2_Illumina <- venn.diagram(
+  x = list(genes_illumina_DE$Id, genes_P2_DE$Id),
+  category.names = c(paste0("Illumina (", nrow(genes_illumina_DE), ")"), 
+                     paste0("P2 (", nrow(genes_P2_DE), ")")),
+  filename = NULL,
+  height = 400 , 
+  width = 400 , 
+  col=c("#440154ff", '#21908dff'),
+  fill = c(alpha("#440154ff",0.3), alpha('#21908dff',0.3)),
+  cex = 1,
+  fontfamily = "sans",
+  cat.cex = 1,
+  cat.pos = c(-27, 27),
+  cat.fontfamily = "sans",
+  cat.col = c("#440154ff", '#21908dff'))
+
+
+ggarrange(P2_Illumina, batch_effect_removed, ncol = 2, nrow=1, labels = c("Batch Effect", "Batch Effect Removed"),
+          label.x = 0,
+          label.y = 1)
+
+```
+
+**EdgeR**
+
+```{r}
+library(edgeR)
+
+Counts <-read.table('~/shares-net/sequencages/analyses/cDNAKit14_A2022//deseq2_output/deseq2_Experiment1-normalisation_rawCountMatrix.tsv', header=TRUE, sep='\t', row.names=1)
+colnames(Counts) <- c("Neg1", "Neg2",  "Neg3", "LLO1", "LLO2", "LLO3")
+dim(Counts)
+head(Counts)
+
+
+dgList <- DGEList(counts=Counts, genes=rownames(Counts))
+dgList
+dgList$samples
+head(dgList$counts) #Many rows!
+head(dgList$genes) #Likewise!
+
+countsPerMillion <- cpm(dgList)
+summary(countsPerMillion)
+
+countCheck <- countsPerMillion > 1
+head(countCheck)
+keep <- which(rowSums(countCheck) >= 2)
+dgList <- dgList[keep,]
+summary(cpm(dgList))
+dgList <- calcNormFactors(dgList, method="TMM")
+
+plotMDS(dgList)
+
+sampleType<- rep("Neg", ncol(dgList)) #N=normal; T=tumour
+sampleType[grep("LLO", colnames(dgList))] <- "T"
+#'grep' is a string matching function.
+sampleReplicate <- paste("S", rep(1:3, each=2), sep="")
+designMat <- model.matrix(~sampleReplicate + sampleType)
+designMat
+
+dgList <- estimateGLMCommonDisp(dgList, design=designMat)
+dgList <- estimateGLMTrendedDisp(dgList, design=designMat)
+dgList <- estimateGLMTagwiseDisp(dgList, design=designMat)
+
+plotBCV(dgList)
+
+fit <- glmFit(dgList, designMat)
+lrt <- glmLRT(fit, coef=ncol(fit$design))
+edgeR_result <- topTags(lrt)
+
+edgeR_result<- data.frame(edgeR_result)
+deGenes <- decideTestsDGE(lrt, p=0.05)
+deGenes <- rownames(lrt)[as.logical(deGenes)]
+plotSmear(lrt, de.tags=deGenes)
+abline(h=c(-1, 1), col=2)
+
+deGenes <- data.frame(deGenes)
+print(deGenes)
+```
+
+```{r}
+
+colnames(deGenes) <- c("Id")
+
+overlap_illumina <- merge(deGenes_P2, deGenes, by="Id" )
+
+print(overlap_illumina)
+print(deGenes)
+```
+
+
+
+**Towards Data Science**
+```{r}
+library("edgeR")
+
+readCount <- read.table(file = "~/shares-net/sequencages/analyses/P2solo_cDNA_R9_B2023_P2/deseq2_output/deseq2_Experiment1-normalisation_normalisedCountMatrix.tsv", header = T, row.names = 1, stringsAsFactors = F, check.names = F)
+conditions <- c("LLO", "LLO", "LLO", "Neg", "Neg", "Neg")
+conditions <- factor(t(conditions))# edgeR TMM normalize
+y <- DGEList(counts = readCount, group = conditions)## Remove rows conssitently have zero or very low counts
+keep <- filterByExpr(y)
+y <- y[keep, keep.lib.sizes = FALSE]## Perform TMM normalization and convert to CPM (Counts Per Million)
+y <- calcNormFactors(y, method = "TMM")
+count_norm <- cpm(y)
+count_norm <- as.data.frame(count_norm)# Run the Wilcoxon rank-sum test for each gene
+pvalues <- sapply(1:nrow(count_norm), function(i){
+  data <- cbind.data.frame(gene = as.numeric(t(count_norm[i,])), conditions)
+  p <- wilcox.test(gene~conditions, data)$p.value
+  return(p)})
+fdr <- p.adjust(pvalues, method = "fdr")# Calculate the fold-change for each gene
+conditionsLevel <- levels(conditions)
+dataCon1 <- count_norm[,c(which(conditions==conditionsLevel[1]))]
+dataCon2 <- count_norm[,c(which(conditions==conditionsLevel[2]))]
+foldChanges <- log2(rowMeans(dataCon2)/rowMeans(dataCon1))# Output results based on the FDR threshold 0.05
+outRst <- data.frame(log2foldChange = foldChanges, pValues = pvalues, FDR = fdr)
+rownames(outRst) <- rownames(count_norm)
+outRst <- na.omit(outRst)
+fdrThres <- 0.05
+outRst <- outRst[outRst$FDR<fdrThres,]
+```
+
